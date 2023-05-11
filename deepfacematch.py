@@ -1,9 +1,9 @@
-#python script.py "D:/sd.webui/webui/outputs/txt2img-images/" 20
+#python script.py cpucore=4 topn=100 facefake="D:/sd.webui/webui/outputs/txt2img-images/"
+
 import os
+import sys
 import cv2
 import shutil
-import sys
-import time
 from collections import defaultdict
 from multiprocessing import Pool
 from deepface import DeepFace
@@ -23,14 +23,14 @@ def calculate_distance(img1, img2, model):
         return None
 
 def process_image(args):
-    img1path, imgsfolder, model, img_count, target_img_count, total_images = args
+    img1path, facefake, model, img_count, target_img_count, total_images = args
     img1 = read_image(img1path)
     if img1 is None:
         return []
 
     count = 0
     distance_scores = []
-    for root, _, files in os.walk(imgsfolder):
+    for root, _, files in os.walk(facefake):
         for filename in files:
             if filename.endswith(('.jpg', '.png')):
                 img_path = os.path.join(root, filename)
@@ -49,10 +49,10 @@ def process_image(args):
 
     return distance_scores
 
-def get_target_images(target_folder):
+def get_target_images(facereal):
     target_images = []
     img_count = 0
-    for root, _, files in os.walk(target_folder):
+    for root, _, files in os.walk(facereal):
         for filename in files:
             if filename.endswith(('.jpg', '.png')):
                 img_count += 1
@@ -60,30 +60,20 @@ def get_target_images(target_folder):
                 target_images.append((img1path, img_count))
     return target_images
 
-def main():
-    if len(sys.argv) != 3:
-        print("Usage: python script.py imgsfolder n_best_matches")
-        sys.exit(1)
-
-    imgsfolder = sys.argv[1]
-    n_best_matches = int(sys.argv[2])
-
-    target_folder = "realimage"
+def main(cpucore, topn, facefake):
+    facereal = "realimage"
     model = 'Facenet512'
-    destination_folder = "D:/sd.webui/webui/outputs/best_matches"
-    processnum = 4
+    faceselect = "D:/sd.webui/webui/outputs/best_matches"
 
-    if not os.path.exists(destination_folder):
-        os.makedirs(destination_folder)
+    if not os.path.exists(faceselect):
+        os.makedirs(faceselect)
 
-    total_images = sum([len(files) for r, d, files in os.walk(imgsfolder) if any(fname.endswith(('.jpg', '.png')) for fname in files)])
-    target_img_count = sum([len(files) for r, d, files in os.walk(target_folder) if any(fname.endswith(('.jpg', '.png')) for fname in files)])
-    target_images = get_target_images(target_folder)
+    total_images = sum([len(files) for r, d, files in os.walk(facefake) if any(fname.endswith(('.jpg', '.png')) for fname in files)])
+    target_img_count = sum([len(files) for r, d, files in os.walk(facereal) if any(fname.endswith(('.jpg', '.png')) for fname in files)])
+    target_images = get_target_images(facereal)
 
-    start_time = time.time()
-
-    with Pool(processes=processnum) as pool:
-        results = pool.map(process_image, [(img1path, imgsfolder, model, img_count, target_img_count, total_images) for img1path, img_count in target_images])
+    with Pool(processes=cpucore) as pool:
+        results = pool.map(process_image, [(img1path, facefake, model, img_count, target_img_count, total_images) for img1path, img_count in target_images])
         
         avg_distance_scores = defaultdict(float)
         for result in results:
@@ -92,14 +82,22 @@ def main():
 
     sorted_avg_distance_scores = sorted(avg_distance_scores.items(), key=lambda x: x[1])
 
-    for i, (img_path, _) in enumerate(sorted_avg_distance_scores[:n_best_matches]):
-        new_filename = f"z{str(i+1).zfill(5)}.png"
-        shutil.copy2(img_path, os.path.join(destination_folder, new_filename))
-
-    end_time = time.time()
-    print(f"Total running time: {end_time - start_time} seconds")
+    for i, (img_path, avg_distance) in enumerate(sorted_avg_distance_scores[:topn]):
+        new_filename = f"z000{i+1}_avg_dist_{avg_distance:.4f}.png"
+        shutil.copy2(img_path, os.path.join(faceselect, new_filename))
 
 if __name__ == "__main__":
-    main()
+    cpucore = 4
+    topn = 100
+    facefake = "D:/sd.webui/webui/outputs/txt2img-images2/"
 
- 
+    for arg in sys.argv[1:]:
+        key, value = arg.split('=')
+        if key.lower() == 'cpucore':
+            cpucore = int(value)
+        elif key.lower() == 'topn':
+            topn = int(value)
+        elif key.lower() == 'facefake':
+            facefake = value
+
+    main(cpucore, topn, facefake)
