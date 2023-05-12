@@ -1,13 +1,40 @@
-#python script.py cpucore=4 topn=100 facefake="D:/sd.webui/webui/outputs/txt2img-images/"
+"""
+This Python script is designed to find and select the best-matching images of fake faces based on their distance from real faces.
 
+The script starts by importing necessary libraries, such as os, sys, cv2, shutil, time, collections, and multiprocessing. It also imports the DeepFace library for facial recognition tasks.
+
+The read_image function reads an image from a given file path and returns the image object. If an error occurs, it prints the error message and returns None.
+
+The calculate_distance function takes two images and a model as input, and returns the distance between the two images using the DeepFace.verify function. If an error occurs, it prints the error message and returns None.
+
+The process_image function takes several arguments, such as image paths, facefake folder, model, image counts, etc. It reads the target image and calculates the distance between the target image and images in the facefake folder. It adds the distance scores to a list and returns the list once the processing is done.
+
+The get_target_images function takes a facereal folder as input and returns a list of target images found in the folder.
+
+The main function initializes some variables, such as cpucore, maxdistance, facefake, and facereal folders. It also calculates the total number of images to process and creates a target_img_count variable to store the total count of target images found.
+
+It then uses multiprocessing with a Pool to parallelize the processing of images. The results are stored in a defaultdict with float data type to calculate the average distance scores.
+
+Next, it sorts the average distance scores and selects the images with a distance score less than or equal to the maxdistance variable.
+
+Finally, it copies the selected images to a new folder, faceselect, and prints the script's running time.
+
+The script also accepts command-line arguments for cpucore, maxdistance, and facefake variables, allowing users to customize the script's behavior.
+
+call with parameter
+python deepfacematch.py cpucore=8 maxdistance=0.5 facefake="D:\sd.webui\webui\outputs\txt2img-images\2023-05-11"
+
+"""
 import os
 import sys
 import cv2
 import shutil
+import time
 from collections import defaultdict
 from multiprocessing import Pool
 from deepface import DeepFace
 
+# Function to read image from given file path
 def read_image(img_path):
     try:
         return cv2.imread(img_path)
@@ -15,6 +42,7 @@ def read_image(img_path):
         print(f"Error occurred while reading {img_path}: {str(e)}")
         return None
 
+# Function to calculate distance between two images using DeepFace
 def calculate_distance(img1, img2, model):
     try:
         return DeepFace.verify(img1, img2, model_name=model)["distance"]
@@ -22,6 +50,7 @@ def calculate_distance(img1, img2, model):
         print(f"Error occurred while processing: {str(e)}")
         return None
 
+# Function to process each image and calculate the distance scores
 def process_image(args):
     img1path, facefake, model, img_count, target_img_count, total_images = args
     img1 = read_image(img1path)
@@ -49,6 +78,7 @@ def process_image(args):
 
     return distance_scores
 
+# Function to get the target images from the facereal folder
 def get_target_images(facereal):
     target_images = []
     img_count = 0
@@ -60,10 +90,11 @@ def get_target_images(facereal):
                 target_images.append((img1path, img_count))
     return target_images
 
-def main(cpucore, topn, facefake):
-    facereal = "realimage"
+# Main function
+def main(cpucore, maxdistance, facefake):
+    facereal = "facereal"
     model = 'Facenet512'
-    faceselect = "D:/sd.webui/webui/outputs/best_matches"
+    faceselect = facefake.replace("-images", "-images-best")
 
     if not os.path.exists(faceselect):
         os.makedirs(faceselect)
@@ -72,6 +103,7 @@ def main(cpucore, topn, facefake):
     target_img_count = sum([len(files) for r, d, files in os.walk(facereal) if any(fname.endswith(('.jpg', '.png')) for fname in files)])
     target_images = get_target_images(facereal)
 
+    # Process images using multiple processes
     with Pool(processes=cpucore) as pool:
         results = pool.map(process_image, [(img1path, facefake, model, img_count, target_img_count, total_images) for img1path, img_count in target_images])
         
@@ -81,23 +113,30 @@ def main(cpucore, topn, facefake):
                 avg_distance_scores[img_path] += distance_score / target_img_count
 
     sorted_avg_distance_scores = sorted(avg_distance_scores.items(), key=lambda x: x[1])
-
-    for i, (img_path, avg_distance) in enumerate(sorted_avg_distance_scores[:topn]):
-        new_filename = f"z000{i+1}_avg_dist_{avg_distance:.4f}.png"
+    selected_images = [(img, distance) for img, distance in sorted_avg_distance_scores if distance <= maxdistance]
+    
+    # Copy the selected images to the faceselect folder
+    for i, (img_path, avg_distance) in enumerate(selected_images):
+        file_ext = os.path.splitext(img_path)[1]
+        new_filename = f"_face_{int(avg_distance * 10000):04d}{file_ext}"        
         shutil.copy2(img_path, os.path.join(faceselect, new_filename))
 
 if __name__ == "__main__":
-    cpucore = 4
-    topn = 100
+    start_time = time.time()
+    cpucore = 6
+    maxdistance = 0.5
     facefake = "D:/sd.webui/webui/outputs/txt2img-images2/"
 
     for arg in sys.argv[1:]:
         key, value = arg.split('=')
         if key.lower() == 'cpucore':
             cpucore = int(value)
-        elif key.lower() == 'topn':
-            topn = int(value)
+        elif key.lower() == 'maxdistance':
+            maxdistance = float(value)
         elif key.lower() == 'facefake':
             facefake = value
 
-    main(cpucore, topn, facefake)
+    main(cpucore, maxdistance, facefake)
+    minutes, seconds = divmod((time.time() - start_time), 60)
+    print(f"Script running time: {int(minutes)}:{int(seconds)} minutes")
+
