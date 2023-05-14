@@ -2,7 +2,6 @@
 
 get the most similar faces in stable fussion(automatic1111) txt2img folder with a few reference images using deepface model, number them by similarity and copy them to a new folder.
 
-facelabel.py
 
 # Face Comparison Tool
 
@@ -17,6 +16,8 @@ This Python script is a face comparison tool that uses several face recognition 
 - Saves labeled images with model and backend information in the filename
 
 ## How It Works
+
+facelabel.py
 
 1. Load the reference image and set the list of backends and models to use.
 2. Iterate through all images in the specified folder.
