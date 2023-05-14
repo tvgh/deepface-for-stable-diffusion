@@ -22,7 +22,7 @@ Finally, it copies the selected images to a new folder, faceselect, and prints t
 The script also accepts command-line arguments for cpucore, maxdistance, and facefake variables, allowing users to customize the script's behavior.
 
 call with parameter
-python deepfacematch.py cpucore=8 maxdistance=0.5 facefake="D:/stable-diffusion-webui/outputs/txt2img-images/2023-05-14"
+python facematch.py cpucore=8 maxdistance=0.5 facefake="D:/stable-diffusion-webui/outputs/txt2img-images/2023-05-14"
 
 '''
 
